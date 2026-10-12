@@ -1,3 +1,4 @@
 screenshot*.png
 tests/sample-day-sheet.pdf
 node_modules/
+tests/_downloads/

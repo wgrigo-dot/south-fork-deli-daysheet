@@ -1,6 +1,6 @@
 /* South Fork Deli Day Sheet — service worker (offline cache).
  * Bump CACHE when you change any app file so phones pick up the new version. */
-var CACHE = 'sfd-daysheet-v1.0.0';
+var CACHE = 'sfd-daysheet-v1.1.0';
 var ASSETS = [
   './', 'index.html', 'styles.css', 'calc.js', 'app.js', 'manifest.json',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png'

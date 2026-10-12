@@ -15,7 +15,7 @@ static host and "Add to Home Screen" on iPhone (Safari) or Android (Chrome).
 | `manifest.json` | PWA manifest (name, icons, standalone display) |
 | `icons/` | SVG + PNG icons (192, 512, maskable 512, 180 apple-touch) |
 | `tests/calc.test.js` | Node unit test of the formulas (`node tests/calc.test.js`) |
-| `tests/e2e.test.js` | Headless-Chrome end-to-end test (needs `puppeteer-core`) |
+| `tests/e2e.test.js` | Headless-Chrome end-to-end test at 390x844 (needs `puppeteer-core`) |
 
 ## Formulas (edit in `calc.js` → `computeDaySheet`)
 ```
@@ -36,6 +36,24 @@ for reporting only; they do not affect over/short. Math is done in whole cents.
 Note: Actual balance counts only the leave-in cash. If cash is pulled from the drawer
 (e.g. a bank deposit) and not left in, it will show as SHORT unless you add it to the
 formula (e.g. add a "cash removed/deposit" field and include it in Actual balance).
+
+## NY sales tax (8.75%)
+`TAX_RATE = 0.0875` in `calc.js` (one constant). Taxable sales and Sales tax are linked:
+- Type **taxable sales** → tax = taxable × 0.0875 (rounded to cents), e.g. 812.40 → 71.09.
+- Type **sales tax** → taxable = tax ÷ 0.0875 (rounded to cents), e.g. 87.50 → 1000.00.
+- The field you edited last drives the other; the filled-in field stays editable (editing it makes it the driver).
+- Linking happens only while typing; opening a saved day shows exactly what was saved.
+
+## Leave-in drawer for a later day
+In the Leave-in cash card, pick the day the drawer will be used (defaults to the next day)
+and tap **Send to that day**. That day's starting drawer is set to this leave-in count
+(hundreds + fifties → "Other $") and shows "drawer assigned from <label> leave-in".
+If that day is already saved with a starting drawer, or already has a drawer from another
+day, you are asked before it's replaced. An assigned drawer takes precedence over the
+automatic "previous saved day" prefill. Unsaved assignments are listed in History →
+Upcoming drawers (stored under `drawers` in the same localStorage key and in backups).
+**Print drawer slip** prints a sheet to put in the drawer: target day/label, source day,
+count and amount per denomination, total, and counted/verified lines.
 
 ## Behavior
 - Date defaults to today in America/New_York; label like `10062026TUE`.

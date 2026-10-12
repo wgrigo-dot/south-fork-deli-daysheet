@@ -38,7 +38,19 @@ const check = (name, ok, info) => { results.push((ok ? 'PASS ' : 'FAIL ') + name
   check('day label', (await txt('#dayLabel')) === '10052026MON', await txt('#dayLabel'));
   const start = { singles: 40, fives: 10, tens: 5, twenties: 3, pennies: 50, nickels: 40, dimes: 50, quarters: 40 };
   for (const [k, v] of Object.entries(start)) await type('#start_' + k, v);
-  await type('#sales', '2345.67'); await type('#taxable', '812.40'); await type('#taxCollected', '70.07');
+  await type('#sales', '2345.67'); await type('#taxable', '812.40');
+  const val = sel => page.$eval(sel, e => e.value);
+  check('tax: taxable 812.40 -> tax 71.09', (await val('#taxCollected')) === '71.09', await val('#taxCollected'));
+  check('8.75% shown near tax fields', (await page.$$eval('.taxrate', es => es.map(e => e.textContent).join('|'))).includes('8.75%'));
+  await type('#taxCollected', '87.50');
+  check('tax: tax 87.50 -> taxable 1000.00', (await val('#taxable')) === '1000.00', await val('#taxable'));
+  await type('#taxable', '812.40'); // taxable becomes the driver again
+  check('tax: re-edit taxable drives tax again', (await val('#taxCollected')) === '71.09');
+  await type('#taxCollected', '71.10'); // manual override of derived field
+  check('tax: manual override kept, taxable re-derived', (await val('#taxCollected')) === '71.10' && (await val('#taxable')) === '812.57', await val('#taxable'));
+  await type('#taxable', '812.40');
+  await page.evaluate(() => document.querySelector('#taxable').closest('.card').scrollIntoView({ block: 'center' }));
+  await page.screenshot({ path: path.join(ROOT, 'screenshot-tax.png') });
   const payouts = [["Boar's Head", '312.45'], ['Sysco', '88.10'], ['Coke', '46']];
   for (let i = 0; i < payouts.length; i++) {
     await tap('[data-add="payouts"]');
@@ -82,6 +94,29 @@ const check = (name, ok, info) => { results.push((ok ? 'PASS ' : 'FAIL ') + name
   check('day saved to localStorage', !!stored && stored.computed.difference === -39.52, stored && stored.computed.difference);
   check('status pill Saved', (await txt('#statusPill')) === 'Saved');
 
+  // Loading a saved day must not recompute stored tax values
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('sfd.daysheet.v1')); s.days['2026-10-05'].taxCollected = '70.07'; localStorage.setItem('sfd.daysheet.v1', JSON.stringify(s)); });
+  await page.reload({ waitUntil: 'networkidle0' });
+  await setDate('2026-10-05');
+  check('loaded day keeps stored taxable/tax (812.40 / 70.07)', (await val('#taxable')) === '812.40' && (await val('#taxCollected')) === '70.07', (await val('#taxable')) + '/' + (await val('#taxCollected')));
+
+  // ---- Assign leave-in drawer to a chosen later day (10/8, skipping 10/6-10/7)
+  check('assign date defaults to next day', (await val('#assignDate')) === '2026-10-06', await val('#assignDate'));
+  await page.$eval('#assignDate', e => { e.value = '2026-10-08'; e.dispatchEvent(new Event('change', { bubbles: true })); });
+  await tap('#assignBtn');
+  const dr = await page.evaluate(() => JSON.parse(localStorage.getItem('sfd.daysheet.v1')).drawers['2026-10-08']);
+  check('drawer stored for 2026-10-08 from 10/05', dr && dr.fromDate === '2026-10-05' && dr.start.other === '250', JSON.stringify(dr && dr.start));
+  await page.evaluate(() => document.querySelector('#assignNote').scrollIntoView({ block: 'center' }));
+  await new Promise(r => setTimeout(r, 2900));
+  await page.screenshot({ path: path.join(ROOT, 'screenshot-assign.png') });
+  // Drawer slip
+  await page.emulateMediaType('print');
+  await page.evaluate(() => { window.__daysheet.buildSlip(); });
+  const slip = await page.$eval('#printSheet', e => e.innerText);
+  await page.evaluate(() => window.__daysheet.dayPrintMode());
+  check('drawer slip shows target, source, counts, total', slip.includes('10082026THU') && slip.includes('10052026MON') && slip.includes('$650.13') && /Hundreds\s+2\s+\$200\.00/.test(slip), slip.replace(/\n/g, ' | ').slice(0, 200));
+  await page.emulateMediaType('screen');
+
   // ---- Day 2: prefill from previous leave-in
   await setDate('2026-10-06');
   check('day 2 label', (await txt('#dayLabel')) === '10062026TUE');
@@ -103,14 +138,37 @@ const check = (name, ok, info) => { results.push((ok ? 'PASS ' : 'FAIL ') + name
   check('OVER shown in green', overColor === 'rgb(31, 107, 58)', overColor);
   await page.click('#saveBtn');
 
+  // ---- Assigned drawer takes precedence over previous-saved-day prefill (10/06 leave = $667.50)
+  await setDate('2026-10-08');
+  check('10/08 start = assigned 10/05 drawer $650.13 (not 10/06 $667.50)', (await txt('#startTotal')) === '$650.13', await txt('#startTotal'));
+  check('10/08 shows drawer source', (await txt('#prefillNote')).includes('drawer assigned from 10052026MON'), await txt('#prefillNote'));
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: path.join(ROOT, 'screenshot-target-day.png') });
+  await setDate('2026-10-07');
+  check('unassigned 10/07 still prefills from prev saved (10/06 $667.50)', (await txt('#startTotal')) === '$667.50', await txt('#startTotal'));
+  // Saved target day with a starting drawer -> confirm before replacing
+  await setDate('2026-10-05');
+  await page.$eval('#assignDate', e => { e.value = '2026-10-06'; e.dispatchEvent(new Event('change', { bubbles: true })); });
+  const dialogs = []; page.on('dialog', d => dialogs.push(d.message()));
+  await tap('#assignBtn');
+  await new Promise(r => setTimeout(r, 200));
+  const d6 = await page.evaluate(() => JSON.parse(localStorage.getItem('sfd.daysheet.v1')).days['2026-10-06']);
+  check('confirm asked before replacing saved 10/06 drawer', dialogs.some(m => m.includes('already saved')), dialogs.join('|'));
+  check('saved 10/06 start updated + source recorded', d6.drawerFrom === '10052026MON' && d6.start.other === '250' && d6.sales === '1800', d6.drawerFrom);
+  // restore 10/06 original start so later summary math is unchanged
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('sfd.daysheet.v1')); const d = s.days['2026-10-06']; d.start = { singles: '47', fives: '12', tens: '8', twenties: '10', other: '250', pennies: '63', nickels: '20', dimes: '25', quarters: '36' }; localStorage.setItem('sfd.daysheet.v1', JSON.stringify(s)); });
+  await page.reload({ waitUntil: 'networkidle0' });
+
   // ---- History + summary
   await page.click('nav.tabs [data-view="history"]');
-  await page.click('[data-range="all"]');
+  await tap('[data-range="all"]');
   const hist = await page.$$eval('#histList .lab', els => els.map(e => e.textContent));
   check('history newest first', JSON.stringify(hist) === '["10062026TUE","10052026MON"]', JSON.stringify(hist));
   const summ = await page.$eval('#summary', e => e.innerText.replace(/\n/g, ' | '));
   check('summary sales total $4,145.67', summ.includes('$4,145.67'), summ);
   check('summary net SHORT $27.02', summ.includes('SHORT $27.02'), summ);
+  const upc = await page.$eval('#drawerList', e => e.innerText);
+  check('history lists upcoming drawer', upc.includes('10082026THU') && upc.includes('10052026MON'), upc.replace(/\n/g, ' '));
   await page.screenshot({ path: path.join(ROOT, 'screenshot-history.png') });
 
   // CSV + backup content (generated through the app's own functions via download interception)
@@ -118,7 +176,7 @@ const check = (name, ok, info) => { results.push((ok ? 'PASS ' : 'FAIL ') + name
   const dl = path.join(ROOT, 'tests', '_downloads'); fs.rmSync(dl, { recursive: true, force: true }); fs.mkdirSync(dl, { recursive: true });
   await client.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dl });
   await page.evaluate(() => { window.matchMedia = () => ({ matches: false }); });
-  await page.click('#csvAllBtn'); await new Promise(r => setTimeout(r, 800));
+  await tap('#csvAllBtn'); await new Promise(r => setTimeout(r, 800));
   await page.click('nav.tabs [data-view="tools"]'); await page.click('#exportBtn'); await new Promise(r => setTimeout(r, 800));
   const files = fs.readdirSync(dl);
   const csvF = files.find(f => f.endsWith('.csv')), jsonF = files.find(f => f.endsWith('.json'));
@@ -140,12 +198,14 @@ const check = (name, ok, info) => { results.push((ok ? 'PASS ' : 'FAIL ') + name
 
   // Print view renders
   await page.click('nav.tabs [data-view="history"]');
-  await page.click('[data-open="2026-10-05"]');
+  await tap('#histList [data-open="2026-10-05"]');
   await page.emulateMediaType('print');
   await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
   const pr = await page.$eval('#printSheet', e => ({ vis: getComputedStyle(e).display, t: e.innerText }));
   check('print sheet visible in print media with SHORT $39.52', pr.vis === 'block' && pr.t.includes('SHORT $39.52') && pr.t.includes('10052026MON'));
   await page.pdf({ path: path.join(ROOT, 'tests', 'sample-day-sheet.pdf'), format: 'letter', printBackground: true });
+  await page.evaluate(() => window.__daysheet.buildSlip());
+  await page.pdf({ path: path.join(ROOT, 'tests', 'sample-drawer-slip.pdf'), format: 'letter', printBackground: true });
   await page.emulateMediaType('screen');
 
   // Delete with confirm

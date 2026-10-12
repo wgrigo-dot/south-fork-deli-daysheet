@@ -36,6 +36,10 @@
     { key: 'pennies',  label: 'Pennies',  value: 0.01, kind: 'count' }
   ];
 
+  // New York State + local sales tax rate applied to all taxable sales (8.75%).
+  var TAX_RATE = 0.0875;
+  var TAX_BP = 875; // TAX_RATE in basis points (x10000) for exact integer-cent math
+
   // Parse user input ("1,234.5", "$20", "") into a number. Blank/invalid => 0.
   function num(v) {
     if (v === null || v === undefined) return 0;
@@ -142,6 +146,24 @@
     return s;
   }
 
+  // Taxable sales -> sales tax (rounded to cents). Returns '' for blank input.
+  function taxFromTaxable(taxable) {
+    if (String(taxable == null ? '' : taxable).trim() === '') return '';
+    return (Math.round(toCents(taxable) * TAX_BP / 10000) / 100).toFixed(2);
+  }
+  // Sales tax -> taxable sales (rounded to cents). Returns '' for blank input.
+  function taxableFromTax(tax) {
+    if (String(tax == null ? '' : tax).trim() === '') return '';
+    return (Math.round(toCents(tax) * 10000 / TAX_BP) / 100).toFixed(2);
+  }
+
+  // ISO date plus n days ("2026-10-10", 1) -> "2026-10-11".
+  function addDays(iso, n) {
+    var p = String(iso).split('-');
+    var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + (n || 0)));
+    return d.toISOString().slice(0, 10);
+  }
+
   // Day label like 10062026TUE from an ISO date "2026-10-06".
   var DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
   function dayLabel(iso) {
@@ -165,6 +187,7 @@
 
   return {
     START_DENOMS: START_DENOMS, LEAVE_DENOMS: LEAVE_DENOMS,
+    TAX_RATE: TAX_RATE, taxFromTaxable: taxFromTaxable, taxableFromTax: taxableFromTax, addDays: addDays,
     computeDaySheet: computeDaySheet, startFromLeave: startFromLeave,
     dayLabel: dayLabel, todayNY: todayNY, money: money, num: num
   };

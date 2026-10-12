@@ -44,5 +44,22 @@ assert.strictEqual(C.todayNY(new Date('2026-10-07T02:30:00Z')), '2026-10-06'); /
 assert.strictEqual(C.money(-39.52), '-$39.52');
 pass += 4;
 
+// NY sales tax 8.75% link
+assert.strictEqual(C.TAX_RATE, 0.0875);
+assert.strictEqual(C.taxableFromTax('87.50'), '1000.00');
+assert.strictEqual(C.taxFromTaxable('812.40'), '71.09');   // 71.085 rounds up
+assert.strictEqual(C.taxFromTaxable('1,000'), '87.50');
+assert.strictEqual(C.taxableFromTax('71.09'), '812.46');
+assert.strictEqual(C.taxFromTaxable('600'), '52.50');
+assert.strictEqual(C.taxFromTaxable(''), '');
+assert.strictEqual(C.taxableFromTax(''), '');
+assert.strictEqual(C.taxFromTaxable('0.05'), '0.00');
+pass += 9;
+// addDays (month/year rollover)
+assert.strictEqual(C.addDays('2026-10-10', 1), '2026-10-11');
+assert.strictEqual(C.addDays('2026-10-31', 1), '2026-11-01');
+assert.strictEqual(C.addDays('2026-12-31', 2), '2027-01-02');
+pass += 3;
+
 console.log('calc tests passed: ' + pass + ' assertions');
 console.log(JSON.stringify(r, null, 1));

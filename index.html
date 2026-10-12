@@ -61,12 +61,12 @@
           <div class="money-in"><input class="n" id="sales" data-path="sales" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
         </div>
         <div class="field">
-          <label for="taxable">Taxable sales</label>
+          <label for="taxable">Taxable sales <span class="taxrate">NY tax 8.75%</span></label>
           <div class="money-in"><input class="n" id="taxable" data-path="taxable" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
-          <p class="hint">From Clover <b>taxable sales</b>, not Amount collected (only the amount tax was applied to).</p>
+          <p class="hint">From Clover <b>taxable sales</b>. Enter either taxable sales or the tax &mdash; the other fills in at 8.75% (tax &divide; 0.0875). <span id="taxDriverNote"></span></p>
         </div>
         <div class="field" style="margin-bottom:0">
-          <label for="taxCollected">Sales tax collected <span class="hint">(optional)</span></label>
+          <label for="taxCollected">Sales tax collected <span class="taxrate">8.75%</span></label>
           <div class="money-in"><input class="n" id="taxCollected" data-path="taxCollected" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
         </div>
       </div>
@@ -97,6 +97,15 @@
         <h2>Leave-in cash</h2>
         <div class="denoms" id="leaveGrid"></div>
         <div class="total-row"><span>Total leave-in</span><span id="leaveTotal">$0.00</span></div>
+        <div class="assign">
+          <label for="assignDate">Use this leave-in drawer on</label>
+          <input type="date" id="assignDate" aria-label="Day this drawer will be used">
+          <div class="btnrow" style="margin-top:8px">
+            <button class="btn" type="button" id="assignBtn">Send to that day</button>
+            <button class="btn" type="button" id="slipBtn">Print drawer slip</button>
+          </div>
+          <p class="hint" id="assignNote">Sets that day&rsquo;s starting drawer to this leave-in count. Print the slip and put it in the drawer.</p>
+        </div>
       </div>
 
       <div class="card results">
@@ -146,6 +155,10 @@
           <button class="btn" type="button" id="csvRangeBtn">CSV (range)</button>
           <button class="btn" type="button" id="csvAllBtn">CSV (all)</button>
         </div>
+      </div>
+      <div class="card">
+        <h2>Upcoming drawers</h2>
+        <ul class="hist" id="drawerList"></ul>
       </div>
       <div class="card">
         <h2>Saved days <span class="sub" id="histCount"></span></h2>

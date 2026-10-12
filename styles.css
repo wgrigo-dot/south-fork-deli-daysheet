@@ -146,3 +146,10 @@ textarea { width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(-
   #printSheet .foot { font-size: 9pt; color: #444; margin-top: 10pt; }
 }
 .btnrow.tight .btn { flex: 1 1 90px; padding: 10px 8px; }
+
+.taxrate{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:#e6f2ea;color:#1f6b3a;font-size:12px;font-weight:600}
+.assign{margin-top:12px;padding-top:12px;border-top:1px dashed #cfd8d2}
+.assign label{display:block;font-weight:600;margin-bottom:6px}
+.assign input[type=date]{width:100%;min-height:44px;font-size:16px;box-sizing:border-box}
+.slip h1{font-size:22px;margin:0 0 4px}.slip .big{font-size:28px;font-weight:700;margin:4px 0}
+.slip table{width:100%;max-width:420px}.slip .sig{margin-top:28px}

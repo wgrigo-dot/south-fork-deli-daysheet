@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var C = window.DaySheetCalc;
-  var APP_VERSION = '1.0.0';
+  var APP_VERSION = '1.1.0';
   var STORE_KEY = 'sfd.daysheet.v1';
   var DRAFT_KEY = 'sfd.daysheet.draft.v1';
 
@@ -18,6 +18,7 @@
     return { app: 'south-fork-deli-daysheet', version: 1, days: {} };
   }
   var store = loadStore();
+  store.drawers = store.drawers || {};  // leave-in drawers assigned to a future date: { "YYYY-MM-DD": {start, leave, fromDate, fromLabel, assignedAt} }
   function persist() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); return true; }
     catch (e) { alert('Could not save: storage is full or blocked. Export a backup now.\n' + e.message); return false; }
@@ -43,6 +44,7 @@
   var cur = null;          // day being edited
   var dirty = false;
   var prefilledFrom = '';  // label of the day the start was prefilled from
+  function startNonZero(start) { return C.computeDaySheet({ start: start }).onStart !== 0; }
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -91,6 +93,9 @@
     renderRows('payouts'); renderRows('overrings');
     $('date').value = cur.date;
     $('dayLabel').textContent = C.dayLabel(cur.date);
+    $('assignDate').value = C.addDays(cur.date, 1);
+    $('assignDate').min = C.addDays(cur.date, 1);
+    updateAssignNote();
     recalc();
   }
 
@@ -133,7 +138,8 @@
     else if (saved) { pill.textContent = 'Saved'; pill.className = 'pill saved'; }
     else { pill.textContent = 'New'; pill.className = 'pill'; }
     $('deleteBtn').disabled = !saved;
-    $('prefillNote').textContent = prefilledFrom ? 'prefilled from ' + prefilledFrom.replace(', edited', '') + ' leave-in' + (prefilledFrom.indexOf('edited') >= 0 ? ' (edited)' : '') : '';
+    $('taxDriverNote').textContent = cur.taxDriver === 'tax' ? '(taxable figured from tax)' : cur.taxDriver === 'taxable' ? '(tax figured from taxable)' : '';
+    $('prefillNote').textContent = cur.drawerFrom ? 'drawer assigned from ' + cur.drawerFrom + ' leave-in' + (prefilledFrom.indexOf('edited') >= 0 ? ' (edited)' : '') : prefilledFrom ? 'prefilled from ' + prefilledFrom.replace(', edited', '') + ' leave-in' + (prefilledFrom.indexOf('edited') >= 0 ? ' (edited)' : '') : '';
   }
 
   // ---------------------------------------------------------------- draft autosave
@@ -159,8 +165,9 @@
       prefilledFrom = cur.prefilledFrom || '';
     } else {
       cur = blankDay(iso);
-      var prev = prevSavedDay(iso);
-      if (prev) { cur.start = C.startFromLeave(prev.leave); prefilledFrom = prev.label || C.dayLabel(prev.date); }
+      var prev = prevSavedDay(iso), asg = store.drawers[iso];
+      if (asg) { cur.start = clone(asg.start); cur.drawerFrom = asg.fromLabel; cur.drawerFromDate = asg.fromDate; prefilledFrom = asg.fromLabel; }
+      else if (prev) { cur.start = C.startFromLeave(prev.leave); prefilledFrom = prev.label || C.dayLabel(prev.date); }
     }
     dirty = false;
     if (!opts.ignoreDraft) {
@@ -196,6 +203,7 @@
     cur.savedAt = new Date().toISOString();
     cur.prefilledFrom = prefilledFrom;
     store.days[cur.date] = clone(cur);
+    delete store.drawers[cur.date];  // assigned drawer is now part of the saved day
     if (persist()) {
       dirty = false; clearDraft();
       renderRows('payouts'); renderRows('overrings');
@@ -212,6 +220,64 @@
     toast('Deleted');
   }
 
+  // ---------------------------------------------------------------- NY sales tax link (8.75%)
+  // Only runs on user input: the field just edited drives the other. Loading a saved day never recomputes.
+  function linkTax(field) {
+    if (field === 'taxable') { cur.taxDriver = 'taxable'; cur.taxCollected = C.taxFromTaxable(cur.taxable); $('taxCollected').value = cur.taxCollected; }
+    else { cur.taxDriver = 'tax'; cur.taxable = C.taxableFromTax(cur.taxCollected); $('taxable').value = cur.taxable; }
+  }
+
+  // ---------------------------------------------------------------- leave-in drawer -> future day
+  function updateAssignNote() {
+    var t = $('assignDate').value, a = t && store.drawers[t], sd = t && store.days[t];
+    var n = 'Sets that day\u2019s starting drawer to this leave-in count. Print the slip and put it in the drawer.';
+    if (a && a.fromDate === cur.date) n = 'Already sent to ' + C.dayLabel(t) + ' (' + money(C.computeDaySheet({ leave: a.leave }).leaveTotal) + ').';
+    else if (sd && sd.drawerFromDate === cur.date) n = 'Already sent to ' + C.dayLabel(t) + '.';
+    $('assignNote').textContent = n;
+  }
+  function assignDrawer() {
+    var t = $('assignDate').value;
+    if (!t) { toast('Pick the day this drawer will be used'); return; }
+    if (t <= cur.date) { toast('Pick a day after ' + C.dayLabel(cur.date)); return; }
+    var lv = C.computeDaySheet({ leave: cur.leave }).leaveTotal;
+    if (!lv) { toast('Count the leave-in cash first'); return; }
+    var start = C.startFromLeave(cur.leave), from = C.dayLabel(cur.date), tl = C.dayLabel(t);
+    var sd = store.days[t], ex = store.drawers[t];
+    if (sd) {
+      if (startNonZero(sd.start) && !confirm(tl + ' is already saved with a starting drawer of ' + money(C.computeDaySheet(sd).onStart) + '. Replace it with ' + from + '\u2019s leave-in (' + money(lv) + ')?')) return;
+      sd.start = start; sd.drawerFrom = from; sd.drawerFromDate = cur.date; sd.prefilledFrom = from;
+      sd.computed = C.computeDaySheet(sd);
+    } else {
+      if (ex && ex.fromDate !== cur.date && !confirm(tl + ' already has a drawer assigned from ' + ex.fromLabel + ' (' + money(C.computeDaySheet({ start: ex.start }).onStart) + '). Replace it?')) return;
+    }
+    store.drawers[t] = { start: start, leave: clone(cur.leave), fromDate: cur.date, fromLabel: from, assignedAt: new Date().toISOString() };
+    if (sd) delete store.drawers[t];
+    try { var dr = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); if (dr && dr.date === t) localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+    if (persist()) { updateAssignNote(); renderHistory(); toast('Drawer ' + money(lv) + ' sent to ' + tl); }
+  }
+  function buildSlip() {
+    var t = $('assignDate').value || C.addDays(cur.date, 1);
+    var r = C.computeDaySheet({ leave: cur.leave });
+    var h = '<div class="slip"><h1>South Fork Deli &mdash; Leave-in Drawer</h1>' +
+      '<div>For use on</div><div class="lab">' + C.dayLabel(t) + '</div><div>' + fmtDate(t) + '</div>' +
+      '<p>Counted at close of <b>' + C.dayLabel(cur.date) + '</b> (' + fmtDate(cur.date) + ')</p>' +
+      '<table><tr><th>Denomination</th><th class="r">Count</th><th class="r">Amount</th></tr>';
+    C.LEAVE_DENOMS.forEach(function (x) { h += '<tr><td>' + x.label + '</td><td class="r">' + esc(cur.leave[x.key] || '0') + '</td><td class="r">' + money(r.leaveLines[x.key]) + '</td></tr>'; });
+    h += '<tr class="tot"><td colspan="2">Total in drawer</td><td class="r">' + money(r.leaveTotal) + '</td></tr></table>' +
+      '<div class="big">TOTAL ' + money(r.leaveTotal) + '</div>' +
+      '<p class="sig">Counted by: ____________________ &nbsp; Verified by: ____________________</p>' +
+      '<div class="foot">Printed ' + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET</div></div>';
+    $('printSheet').innerHTML = h;
+  }
+  var printMode = 'day';
+  $('assignBtn').addEventListener('click', assignDrawer);
+  $('assignDate').addEventListener('change', updateAssignNote);
+  $('slipBtn').addEventListener('click', function () {
+    if (!C.computeDaySheet({ leave: cur.leave }).leaveTotal) { toast('Count the leave-in cash first'); return; }
+    printMode = 'slip'; buildSlip(); window.print();
+    setTimeout(function () { printMode = 'day'; }, 1000);
+  });
+
   // ---------------------------------------------------------------- input wiring
   document.addEventListener('input', function (e) {
     var el = e.target;
@@ -219,6 +285,7 @@
       var p = el.getAttribute('data-path').split('.');
       if (p.length === 2) { cur[p[0]] = cur[p[0]] || {}; cur[p[0]][p[1]] = el.value; }
       else cur[p[0]] = el.value;
+      if (p[0] === 'taxable' || p[0] === 'taxCollected') linkTax(p[0]);
       if (p[0] === 'start' && prefilledFrom && prefilledFrom.indexOf('edited') < 0) prefilledFrom += ', edited';
       markDirty(); recalc();
     } else if (el.hasAttribute('data-row')) {
@@ -269,10 +336,11 @@
     var prev = prevSavedDay(cur.date);
     if (!prev) { toast('No earlier saved day to copy from'); return; }
     cur.start = C.startFromLeave(prev.leave); prefilledFrom = prev.label || C.dayLabel(prev.date);
+    delete cur.drawerFrom; delete cur.drawerFromDate;
     fillForm(); markDirty(); recalc();
   });
   $('clearStartBtn').addEventListener('click', function () {
-    cur.start = {}; prefilledFrom = ''; fillForm(); markDirty(); recalc();
+    cur.start = {}; prefilledFrom = ''; delete cur.drawerFrom; delete cur.drawerFromDate; fillForm(); markDirty(); recalc();
   });
   window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -302,6 +370,12 @@
         '<span><span class="s">' + money(r.sales) + '</span><br><span class="o ' + cls + '">' + r.status + ' ' + money(Math.abs(r.difference)) + '</span></span>' +
         '</button></li>';
     });
+    var today = C.todayNY(), dh = '';
+    Object.keys(store.drawers).sort().forEach(function (iso) {
+      var a = store.drawers[iso];
+      dh += '<li><button type="button" data-open="' + iso + '"><span><span class="lab">' + C.dayLabel(iso) + '</span><br><span class="dt">from ' + esc(a.fromLabel) + '</span></span><span class="s">' + money(C.computeDaySheet({ start: a.start }).onStart) + '</span></button></li>';
+    });
+    $('drawerList').innerHTML = dh || '<li class="hint" style="padding:8px 0">No drawers assigned to upcoming days.</li>';
     $('histList').innerHTML = h || '<li class="hint" style="padding:8px 0">No saved days yet.</li>';
     $('histCount').textContent = dates.length ? dates.length + ' day' + (dates.length === 1 ? '' : 's') : '';
     renderSummary();
@@ -397,7 +471,7 @@
     saveFile('south-fork-deli-' + d[0] + '_to_' + d[d.length - 1] + '.csv', 'text/csv', buildCSV(d));
   });
   $('exportBtn').addEventListener('click', function () {
-    var data = { app: 'south-fork-deli-daysheet', version: 1, exportedAt: new Date().toISOString(), days: store.days };
+    var data = { app: 'south-fork-deli-daysheet', version: 1, exportedAt: new Date().toISOString(), days: store.days, drawers: store.drawers };
     saveFile('south-fork-deli-backup-' + C.todayNY() + '.json', 'application/json', JSON.stringify(data, null, 2));
   });
   $('importBtn').addEventListener('click', function () { $('importFile').value = ''; $('importFile').click(); });
@@ -415,6 +489,7 @@
         var overlap = keys.filter(function (k) { return store.days[k]; }).length;
         if (!confirm('Import ' + keys.length + ' day(s)?' + (overlap ? '\n' + overlap + ' day(s) already on this phone will be replaced by the backup version.' : ''))) return;
         keys.forEach(function (k) { var d = days[k]; d.date = k; d.payouts = d.payouts || []; d.overrings = d.overrings || []; d.start = d.start || {}; d.leave = d.leave || {}; store.days[k] = d; });
+        if (data.drawers && typeof data.drawers === 'object') Object.keys(data.drawers).forEach(function (k) { if (!store.days[k]) store.drawers[k] = data.drawers[k]; });
         persist(); renderHistory(); renderStorageInfo();
         if (!dirty) openDate(cur.date, { ignoreDraft: true });
         toast('Imported ' + keys.length + ' day(s)');
@@ -465,7 +540,8 @@
       '<div class="foot">Printed ' + new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' ET' + (dirty ? ' — NOT SAVED' : '') + '</div>';
     $('printSheet').innerHTML = h;
   }
-  window.addEventListener('beforeprint', buildPrintSheet);
+  window.addEventListener('beforeprint', function () { if (printMode === 'slip') buildSlip(); else buildPrintSheet(); });
+  window.addEventListener('afterprint', function () { printMode = 'day'; });
   $('printBtn').addEventListener('click', function () { buildPrintSheet(); window.print(); });
 
   function textSummary() {
@@ -512,7 +588,7 @@
   if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().catch(function () {}); }
 
   // ---------------------------------------------------------------- boot
-  window.__daysheet = { get cur() { return cur; }, get store() { return store; }, compute: function () { return C.computeDaySheet(cur); }, saveDay: saveDay, openDate: openDate };
+  window.__daysheet = { get cur() { return cur; }, get store() { return store; }, compute: function () { return C.computeDaySheet(cur); }, saveDay: saveDay, openDate: openDate, buildSlip: function () { printMode = 'slip'; buildSlip(); }, dayPrintMode: function () { printMode = 'day'; } };
   setRange('month');
   openDate(C.todayNY());
   renderHistory();
