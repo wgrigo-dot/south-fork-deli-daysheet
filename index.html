@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>South Fork Deli Day Sheet</title>
+  <meta name="description" content="Nightly cash-out day sheet for South Fork Deli">
+  <meta name="theme-color" content="#1f6b3a">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Day Sheet">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app">
+    <h1>South Fork Deli Day Sheet</h1>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-view="day" aria-selected="true">Day</button>
+      <button role="tab" data-view="history" aria-selected="false">History</button>
+      <button role="tab" data-view="tools" aria-selected="false">Backup</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ================= DAY ================= -->
+    <section class="view" id="view-day">
+      <div class="banner" id="draftBanner" hidden>
+        <span>Restored unsaved changes for this day.</span>
+        <button class="btn" id="discardDraft" type="button">Discard</button>
+      </div>
+
+      <div class="card">
+        <div class="daterow">
+          <input type="date" id="date" aria-label="Day">
+          <div>
+            <div class="daylabel" id="dayLabel">--</div>
+            <span class="pill" id="statusPill">New</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>On start <span class="sub" id="prefillNote"></span></h2>
+        <div class="denoms" id="startGrid"></div>
+        <div class="total-row"><span>Total on start</span><span id="startTotal">$0.00</span></div>
+        <div class="btnrow" style="margin-top:10px">
+          <button class="btn" type="button" id="prefillBtn">Copy prev. leave-in</button>
+          <button class="btn" type="button" id="clearStartBtn">Clear</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Sales</h2>
+        <div class="field">
+          <label for="sales">Clover "Amount collected"</label>
+          <div class="money-in"><input class="n" id="sales" data-path="sales" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
+        </div>
+        <div class="field">
+          <label for="taxable">Taxable sales</label>
+          <div class="money-in"><input class="n" id="taxable" data-path="taxable" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
+          <p class="hint">From Clover <b>taxable sales</b>, not Amount collected (only the amount tax was applied to).</p>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="taxCollected">Sales tax collected <span class="hint">(optional)</span></label>
+          <div class="money-in"><input class="n" id="taxCollected" data-path="taxCollected" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Payouts <span class="sub">reduce cash</span></h2>
+        <div class="rows" id="payoutRows"></div>
+        <button class="btn add" type="button" data-add="payouts">+ Add payout</button>
+        <div class="total-row"><span>Total payouts</span><span id="payoutTotal">$0.00</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Over-rings <span class="sub">reduce books</span></h2>
+        <div class="rows" id="overringRows"></div>
+        <button class="btn add" type="button" data-add="overrings">+ Add over-ring</button>
+        <div class="total-row"><span>Total over-rings</span><span id="overringTotal">$0.00</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Merchant services <span class="sub">non-cash</span></h2>
+        <div class="field" style="margin-bottom:0">
+          <label for="merchant">Clover credit + debit total</label>
+          <div class="money-in"><input class="n" id="merchant" data-path="merchant" inputmode="decimal" autocomplete="off" placeholder="0.00"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Leave-in cash</h2>
+        <div class="denoms" id="leaveGrid"></div>
+        <div class="total-row"><span>Total leave-in</span><span id="leaveTotal">$0.00</span></div>
+      </div>
+
+      <div class="card results">
+        <h2>Balance</h2>
+        <div class="r"><span>On start</span><span id="rOnStart">$0.00</span></div>
+        <div class="r"><span><span class="op">+</span> Sales</span><span id="rSales">$0.00</span></div>
+        <div class="r"><span><span class="op">&minus;</span> Payouts</span><span id="rPayouts">$0.00</span></div>
+        <div class="r"><span><span class="op">&minus;</span> Over-rings</span><span id="rOverrings">$0.00</span></div>
+        <div class="r key"><span>Books after payouts</span><span id="rBooks">$0.00</span></div>
+        <div class="r"><span>Leave-in cash</span><span id="rLeave">$0.00</span></div>
+        <div class="r"><span><span class="op">+</span> Merchant services</span><span id="rMerchant">$0.00</span></div>
+        <div class="r key"><span>Actual balance</span><span id="rActual">$0.00</span></div>
+        <div class="diff" id="diffBox"><div class="lbl" id="diffLbl">Even</div><div class="big" id="diffVal">$0.00</div></div>
+        <div class="r key" style="margin-top:8px;border-bottom:0"><span>Income <span class="hint">(actual &minus; on start)</span></span><span id="rIncome">$0.00</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Notes</h2>
+        <textarea id="notes" data-path="notes" placeholder="Optional notes for this day"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="btnrow">
+          <button class="btn primary" type="button" id="saveBtn2">Save day</button>
+          <button class="btn" type="button" id="printBtn">Print / PDF</button>
+          <button class="btn" type="button" id="shareBtn">Share</button>
+          <button class="btn danger" type="button" id="deleteBtn">Delete day</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= HISTORY ================= -->
+    <section class="view" id="view-history" hidden>
+      <div class="card">
+        <h2>Summary</h2>
+        <div class="range">
+          <div><label for="from">From</label><input type="date" id="from"></div>
+          <div><label for="to">To</label><input type="date" id="to"></div>
+        </div>
+        <div class="btnrow tight" style="margin-bottom:10px">
+          <button class="btn" type="button" data-range="week">Last 7 days</button>
+          <button class="btn" type="button" data-range="month">This month</button>
+          <button class="btn" type="button" data-range="all">All</button>
+        </div>
+        <div class="sumgrid" id="summary"></div>
+        <div class="btnrow" style="margin-top:12px">
+          <button class="btn" type="button" id="csvRangeBtn">CSV (range)</button>
+          <button class="btn" type="button" id="csvAllBtn">CSV (all)</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Saved days <span class="sub" id="histCount"></span></h2>
+        <ul class="hist" id="histList"></ul>
+      </div>
+    </section>
+
+    <!-- ================= TOOLS ================= -->
+    <section class="view" id="view-tools" hidden>
+      <div class="card">
+        <h2>Backup</h2>
+        <p class="hint" style="margin-bottom:10px">Your day sheets are stored only on this phone. Export a backup regularly (e.g. to Files, iCloud Drive, Google Drive or email it to yourself).</p>
+        <div class="btnrow">
+          <button class="btn primary" type="button" id="exportBtn">Export JSON backup</button>
+          <button class="btn" type="button" id="importBtn">Import backup</button>
+        </div>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+        <p class="hint" id="storageInfo" style="margin-top:10px"></p>
+      </div>
+      <div class="card">
+        <h2>Add to home screen</h2>
+        <p class="hint"><b>iPhone (Safari):</b> tap the Share button, then <i>Add to Home Screen</i>.<br>
+        <b>Android (Chrome):</b> tap the &#8942; menu, then <i>Install app</i> / <i>Add to Home screen</i>.</p>
+        <button class="btn" type="button" id="installBtn" hidden>Install app</button>
+      </div>
+      <div class="card">
+        <h2>Formulas</h2>
+        <p class="hint">Books after payouts = On start + Sales &minus; Payouts &minus; Over-rings<br>
+        Actual balance = Leave-in cash + Merchant services<br>
+        Difference = Actual balance &minus; Books after payouts (positive = OVER, negative = SHORT)<br>
+        Income = Actual balance &minus; On start</p>
+        <p class="hint" id="appVersion"></p>
+      </div>
+    </section>
+  </main>
+
+  <div class="bottombar" id="bottombar">
+    <div class="mini"><div class="l" id="bbLbl">Over / short</div><div class="v" id="bbVal">$0.00</div></div>
+    <button class="btn primary" type="button" id="saveBtn">Save day</button>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div id="printSheet"></div>
+
+  <script src="calc.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

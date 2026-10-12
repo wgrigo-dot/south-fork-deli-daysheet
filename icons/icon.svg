@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="104" fill="#1f6b3a"/>
+  <g transform="translate(256 262)">
+    <path d="M-120 -170 h240 v330 l-30 -20 -30 20 -30 -20 -30 20 -30 -20 -30 20 -30 -20 -30 20 z" fill="#fff"/>
+    <rect x="-90" y="-128" width="180" height="16" rx="8" fill="#cfe6d6"/>
+    <rect x="-90" y="-92" width="120" height="16" rx="8" fill="#cfe6d6"/>
+    <text x="0" y="60" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="900" font-size="150" fill="#1f6b3a">$</text>
+    <text x="0" y="128" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="44" fill="#1f6b3a" letter-spacing="4">SFD</text>
+  </g>
+</svg>
